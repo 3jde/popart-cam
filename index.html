@@ -1,0 +1,121 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <title>Pop Art Cam (3x5 Grid)</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.9.0/p5.js"></script>
+  <style>
+    body {
+      margin: 0; padding: 0; overflow: hidden; background-color: #111;
+      display: flex; justify-content: center; align-items: center; height: 100vh;
+      font-family: sans-serif;
+    }
+    canvas { box-shadow: 0 0 20px rgba(255, 255, 255, 0.2); cursor: pointer; }
+    #ui {
+      position: absolute; top: 10px; left: 10px; color: white;
+      background: rgba(0,0,0,0.7); padding: 10px 20px;
+      border-radius: 8px; z-index: 10; pointer-events: none;
+    }
+  </style>
+</head>
+<body>
+  <div id="ui">
+    <h2>安迪·沃霍尔波普艺术摄像头</h2>
+    <p>1. 请允许浏览器使用摄像头</p>
+    <p>2. <b>点击画面</b> 即可随机刷新所有格子的波普配色！</p>
+  </div>
+  <script>
+    let cam;
+    let cols = 5; // 5 列
+    let rows = 3; // 3 行 (形成 3x5 的田字格布局)
+    let cellW, cellH;
+    let palettes = []; // 存储每个格子的配色方案
+
+    function setup() {
+      // 设定一个标准的 16:9 比例画布，保证 5x3 切分时不会出现小数偏差
+      createCanvas(1280, 768);
+      pixelDensity(1); // 保证性能，防止视网膜屏幕带来的像素错位
+      
+      cellW = width / cols;   // 256
+      cellH = height / rows;  // 256
+
+      // 仅用一个格子的分辨率来捕获摄像头！极大提升性能
+      cam = createCapture(VIDEO);
+      cam.size(cellW, cellH);
+      cam.hide();
+
+      generatePalettes();
+    }
+
+    function generatePalettes() {
+      colorMode(HSB, 360, 100, 100);
+      palettes = [];
+      for (let i = 0; i < cols; i++) {
+        palettes[i] = [];
+        for (let j = 0; j < rows; j++) {
+          let baseHue = random(360);
+          palettes[i][j] = [
+            color((baseHue + 180) % 360, 90, 30),  // 暗部 (阴影)：互补色、低明度
+            color(baseHue, 85, 80),                // 中灰 (主体)：主色调、高饱和
+            color((baseHue + 60) % 360, 50, 100)   // 亮部 (高光)：邻近色、高明度
+          ];
+        }
+      }
+      colorMode(RGB, 255, 255, 255); // 切回 RGB 模式用于像素处理
+    }
+
+    function draw() {
+      if (!cam.loadedmetadata) return;
+      
+      cam.loadPixels();
+      if (cam.pixels.length === 0) return;
+      
+      loadPixels(); // 加载主画布的像素
+
+      // 遍历 5x3 网格
+      for (let i = 0; i < cols; i++) {
+        for (let j = 0; j < rows; j++) {
+          let pal = palettes[i][j];
+
+          // 遍历每个格子内的像素
+          for (let y = 0; y < cellH; y++) {
+            for (let x = 0; x < cellW; x++) {
+              // 摄像头像素坐标 (带镜像翻转)
+              let camX = cellW - x - 1; 
+              let camIndex = (camX + y * cellW) * 4;
+
+              let r = cam.pixels[camIndex];
+              let g = cam.pixels[camIndex+1];
+              let b = cam.pixels[camIndex+2];
+              
+              // 计算灰度亮度
+              let brightness = (r + g + b) / 3;
+
+              // 色阶分离 (Thresholding) -> 波普艺术核心
+              let outColor;
+              if (brightness < 85) outColor = pal[0];
+              else if (brightness < 170) outColor = pal[1];
+              else outColor = pal[2];
+
+              // 计算主画布对应的像素坐标
+              let screenX = i * cellW + x;
+              let screenY = j * cellH + y;
+              let screenIndex = (screenX + screenY * width) * 4;
+
+              pixels[screenIndex] = red(outColor);
+              pixels[screenIndex+1] = green(outColor);
+              pixels[screenIndex+2] = blue(outColor);
+              pixels[screenIndex+3] = 255;
+            }
+          }
+        }
+      }
+      updatePixels(); // 将处理好的像素一次性推送到画布
+    }
+
+    function mousePressed() {
+      generatePalettes(); // 每次点击鼠标，重新生成艺术配色
+    }
+  </script>
+</body>
+</html>
